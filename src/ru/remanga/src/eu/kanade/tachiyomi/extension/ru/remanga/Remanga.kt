@@ -129,7 +129,7 @@ class Remanga : ConfigurableSource, HttpSource() {
         val request = chain.request()
 
         // authorization exManga
-        if (request.url.toString().contains(exManga) and !(request.url.toString().contains("/auth/login"))) {
+        if (request.url.toString().contains(exManga.replace("api.", "")) and !(request.url.toString().contains("/auth/login"))) {
             if (exManga_access_token.isEmpty() and emailEX.isNotEmpty() and passwordEX.isNotEmpty()) {
                 val response = client.newCall(
                     POST(
@@ -185,7 +185,7 @@ class Remanga : ConfigurableSource, HttpSource() {
         network.cloudflareClient.newBuilder()
             .rateLimitHost("https://img3.reimg.org".toHttpUrl(), loadLimit, 2)
             .rateLimitHost("https://img5.reimg.org".toHttpUrl(), loadLimit, 2)
-            .rateLimitHost(exManga.toHttpUrl(), 3)
+            .rateLimitHost(exManga.replace("api.", "").toHttpUrl(), 3)
             .addInterceptor { imageContentTypeIntercept(it) }
             .addInterceptor { authIntercept(it) }
             .addInterceptor { chain ->
@@ -716,7 +716,7 @@ class Remanga : ConfigurableSource, HttpSource() {
 
     override fun imageRequest(page: Page): Request {
         val refererHeaders = headersBuilder().build()
-        return if (page.imageUrl!!.contains(exManga)) {
+        return if (page.imageUrl!!.contains(exManga.replace("api.", ""))) {
             GET(page.imageUrl!!, exHeaders())
         } else {
             GET(page.imageUrl!!, refererHeaders)
