@@ -6,7 +6,6 @@ import android.widget.Toast
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.network.GET
-import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.asObservable
 import eu.kanade.tachiyomi.network.asObservableSuccess
 import eu.kanade.tachiyomi.network.interceptor.rateLimit
@@ -100,6 +99,7 @@ abstract class LibGroup(
 
     protected var csrfToken: String = ""
 
+    private val baseApi = "https://api.lib.social"
     override fun headersBuilder() = Headers.Builder().apply {
         // User-Agent required for authorization through third-party accounts (mobile version for correct display in WebView)
         add("User-Agent", userAgentMobile)
@@ -139,7 +139,7 @@ abstract class LibGroup(
     }
 
     private fun fetchLatestMangaFromApi(page: Int): Observable<MangasPage> {
-        return client.newCall(POST("$baseUrl/filterlist?dir=desc&sort=last_chapter_at&page=$page&chapters[min]=1", catalogHeaders()))
+        return client.newCall(GET("$baseUrl/api/manga?sort_type=desc&sort_by=last_chapter_at&page=$page&chap_count_min=1", catalogHeaders()))
             .asObservableSuccess()
             .map { response ->
                 latestUpdatesParse(response)
@@ -166,7 +166,7 @@ abstract class LibGroup(
     }
 
     private fun fetchPopularMangaFromApi(page: Int): Observable<MangasPage> {
-        return client.newCall(POST("$baseUrl/filterlist?dir=desc&sort=views&page=$page&chapters[min]=1", catalogHeaders()))
+        return client.newCall(GET("$baseUrl/api/manga?sort_type=desc&sort_by=views&page=$page&chap_count_min=1", catalogHeaders()))
             .asObservableSuccess()
             .map { response ->
                 popularMangaParse(response)
@@ -176,10 +176,9 @@ abstract class LibGroup(
     override fun popularMangaParse(response: Response): MangasPage {
         val resBody = response.body.string()
         val result = json.decodeFromString<JsonObject>(resBody)
-        val items = result["items"]!!.jsonObject
-        val popularMangas = items["data"]?.jsonArray?.map { popularMangaFromElement(it) }
+        val popularMangas = result["data"]?.jsonArray?.map { popularMangaFromElement(it) }
         if (popularMangas != null) {
-            val hasNextPage = items["next_page_url"]?.jsonPrimitive?.contentOrNull != null
+            val hasNextPage = result["links"]!!.jsonObject["next"]!!.jsonPrimitive.contentOrNull != null
             return MangasPage(popularMangas, hasNextPage)
         }
         return MangasPage(emptyList(), false)
@@ -193,11 +192,7 @@ abstract class LibGroup(
             isEng.equals("eng") && el.jsonObject["eng_name"]?.jsonPrimitive?.content.orEmpty().isNotEmpty() -> el.jsonObject["eng_name"]!!.jsonPrimitive.content
             else -> el.jsonObject["name"]!!.jsonPrimitive.content
         }
-        thumbnail_url = if (el.jsonObject["coverImage"] != null) {
-            el.jsonObject["coverImage"]!!.jsonPrimitive.content
-        } else {
-            "/uploads/cover/" + slug + "/cover/" + el.jsonObject["cover"]!!.jsonPrimitive.content + "_250x350.jpg"
-        }
+        thumbnail_url = el.jsonObject["cover"]!!.jsonObject["default"]!!.jsonPrimitive.contentOrNull
         if (!thumbnail_url!!.contains("://")) {
             thumbnail_url = baseUrl + thumbnail_url
         }
@@ -542,7 +537,7 @@ abstract class LibGroup(
             val resBody = tokenResponse.body.string()
             csrfToken = "_token\" content=\"(.*)\"".toRegex().find(resBody)!!.groups[1]!!.value
         }
-        val url = "$baseUrl/filterlist?page=$page&chapters[min]=1".toHttpUrl().newBuilder()
+        val url = "$baseUrl/api/manga?page=$page&chap_count_min=1".toHttpUrl().newBuilder()
         if (query.isNotEmpty()) {
             url.addQueryParameter("name", query)
         }
@@ -574,8 +569,8 @@ abstract class LibGroup(
                     }
                 }
                 is OrderBy -> {
-                    url.addQueryParameter("dir", if (filter.state!!.ascending) "asc" else "desc")
-                    url.addQueryParameter("sort", arrayOf("rate", "name", "views", "created_at", "last_chapter_at", "chap_count")[filter.state!!.index])
+                    url.addQueryParameter("sort_type", if (filter.state!!.ascending) "asc" else "desc")
+                    url.addQueryParameter("sort_by", arrayOf("rate", "name", "views", "created_at", "last_chapter_at", "chap_count")[filter.state!!.index])
                 }
                 is MyList -> filter.state.forEach { favorite ->
                     if (favorite.state != Filter.TriState.STATE_IGNORE) {
@@ -584,13 +579,13 @@ abstract class LibGroup(
                 }
                 is RequireChapters -> {
                     if (filter.state == 1) {
-                        url.setQueryParameter("chapters[min]", "0")
+                        url.setQueryParameter("chap_count_min", "0")
                     }
                 }
                 else -> {}
             }
         }
-        return POST(url.toString(), catalogHeaders())
+        return GET(url.toString(), catalogHeaders())
     }
 
     override fun searchMangaParse(response: Response): MangasPage = popularMangaParse(response)

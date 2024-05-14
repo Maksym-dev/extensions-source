@@ -12,7 +12,7 @@ import okhttp3.Request
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
-class HentaiLib : LibGroup("HentaiLib", "https://hentailib.me", "ru") {
+class HentaiLib : LibGroup("HentaiLib", "https://old.hentailib.me/old", "ru") {
 
     override val id: Long = 6425650164840473547
 
@@ -246,6 +246,6 @@ class HentaiLib : LibGroup("HentaiLib", "https://hentailib.me", "ru") {
         const val PREFIX_SLUG_SEARCH = "slug:"
 
         private const val DOMAIN_TITLE = "Домен"
-        private const val DOMAIN_DEFAULT = "https://hentailib.me"
+        private const val DOMAIN_DEFAULT = "https://old.hentailib.me/old"
     }
 }
