@@ -42,6 +42,7 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 import java.io.IOException
+import java.net.URLDecoder
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -62,6 +63,13 @@ abstract class LibGroup(
 
     override val supportsLatest = true
 
+    private val baseApi = "https://api.lib.social/api/manga?site_id%5B%5D=" + when (name) {
+        "MangaLib" -> "1"
+        "YaoiLib" -> "2"
+        "HentaiLib" -> "4"
+        else -> "-"
+    }
+
     private fun imageContentTypeIntercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
         val response = chain.proceed(originalRequest)
@@ -75,12 +83,30 @@ abstract class LibGroup(
             response
         }
     }
+
+    private fun authIntercept(chain: Interceptor.Chain): Response {
+        val request = chain.request()
+
+        val cookies = client.cookieJar.loadForRequest("https://auth.lib.social".toHttpUrl())
+
+        val access_token = cookies
+            .firstOrNull { cookie -> cookie.name == "XSRF-TOKEN" }
+            ?.let { cookie -> URLDecoder.decode(cookie.value, "UTF-8") }
+            ?: return chain.proceed(request)
+
+        val authRequest = request.newBuilder()
+            .addHeader("Authorization", "Bearer $access_token")
+            .build()
+        return chain.proceed(authRequest)
+    }
+
     override val client: OkHttpClient = network.cloudflareClient.newBuilder()
         .rateLimit(3)
         .connectTimeout(5, TimeUnit.MINUTES)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
         .addNetworkInterceptor { imageContentTypeIntercept(it) }
+        .addInterceptor { authIntercept(it) }
         .addInterceptor { chain ->
             val response = chain.proceed(chain.request())
             if (response.code == 419) {
@@ -97,9 +123,6 @@ abstract class LibGroup(
 
     private val userAgentRandomizer = "${Random.nextInt().absoluteValue}"
 
-    protected var csrfToken: String = ""
-
-    private val baseApi = "https://api.lib.social"
     override fun headersBuilder() = Headers.Builder().apply {
         // User-Agent required for authorization through third-party accounts (mobile version for correct display in WebView)
         add("User-Agent", userAgentMobile)
@@ -116,30 +139,14 @@ abstract class LibGroup(
     protected fun catalogHeaders() = Headers.Builder()
         .apply {
             add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36 Edg/100.0.$userAgentRandomizer")
-            add("Accept", "application/json, text/plain, */*")
-            add("X-Requested-With", "XMLHttpRequest")
-            add("x-csrf-token", csrfToken)
+            add("Accept", "*/*")
         }
         .build()
 
     // Latest
-    override fun latestUpdatesRequest(page: Int) = throw UnsupportedOperationException() // popularMangaRequest()
+    override fun latestUpdatesRequest(page: Int) = throw UnsupportedOperationException()
     override fun fetchLatestUpdates(page: Int): Observable<MangasPage> {
-        if (csrfToken.isEmpty()) {
-            return client.newCall(popularMangaRequest(page))
-                .asObservableSuccess()
-                .flatMap { response ->
-                    // Obtain token
-                    val resBody = response.body.string()
-                    csrfToken = "_token\" content=\"(.*)\"".toRegex().find(resBody)!!.groups[1]!!.value
-                    return@flatMap fetchLatestMangaFromApi(page)
-                }
-        }
-        return fetchLatestMangaFromApi(page)
-    }
-
-    private fun fetchLatestMangaFromApi(page: Int): Observable<MangasPage> {
-        return client.newCall(GET("$baseUrl/api/manga?sort_type=desc&sort_by=last_chapter_at&page=$page&chap_count_min=1", catalogHeaders()))
+        return client.newCall(GET("$baseApi&sort_type=desc&sort_by=last_chapter_at&page=$page&chap_count_min=1", catalogHeaders()))
             .asObservableSuccess()
             .map { response ->
                 latestUpdatesParse(response)
@@ -150,23 +157,9 @@ abstract class LibGroup(
         popularMangaParse(response)
 
     // Popular
-    override fun popularMangaRequest(page: Int) = GET(baseUrl, headers)
+    override fun popularMangaRequest(page: Int) = throw UnsupportedOperationException()
     override fun fetchPopularManga(page: Int): Observable<MangasPage> {
-        if (csrfToken.isEmpty()) {
-            return client.newCall(popularMangaRequest(page))
-                .asObservableSuccess()
-                .flatMap { response ->
-                    // Obtain token
-                    val resBody = response.body.string()
-                    csrfToken = "_token\" content=\"(.*)\"".toRegex().find(resBody)!!.groups[1]!!.value
-                    return@flatMap fetchPopularMangaFromApi(page)
-                }
-        }
-        return fetchPopularMangaFromApi(page)
-    }
-
-    private fun fetchPopularMangaFromApi(page: Int): Observable<MangasPage> {
-        return client.newCall(GET("$baseUrl/api/manga?sort_type=desc&sort_by=views&page=$page&chap_count_min=1", catalogHeaders()))
+        return client.newCall(GET("$baseApi&sort_type=desc&sort_by=views&page=$page&chap_count_min=1", catalogHeaders()))
             .asObservableSuccess()
             .map { response ->
                 popularMangaParse(response)
@@ -532,12 +525,7 @@ abstract class LibGroup(
 
     // Search
     override fun searchMangaRequest(page: Int, query: String, filters: FilterList): Request {
-        if (csrfToken.isEmpty()) {
-            val tokenResponse = client.newCall(popularMangaRequest(page)).execute()
-            val resBody = tokenResponse.body.string()
-            csrfToken = "_token\" content=\"(.*)\"".toRegex().find(resBody)!!.groups[1]!!.value
-        }
-        val url = "$baseUrl/api/manga?page=$page&chap_count_min=1".toHttpUrl().newBuilder()
+        val url = "$baseApi&page=$page&chap_count_min=1".toHttpUrl().newBuilder()
         if (query.isNotEmpty()) {
             url.addQueryParameter("name", query)
         }

@@ -5,14 +5,14 @@ import android.content.SharedPreferences
 import android.widget.Toast
 import androidx.preference.EditTextPreference
 import eu.kanade.tachiyomi.multisrc.libgroup.LibGroup
-import eu.kanade.tachiyomi.network.POST
+import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.source.model.Filter
 import eu.kanade.tachiyomi.source.model.FilterList
 import okhttp3.Request
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
-class HentaiLib : LibGroup("HentaiLib", "https://old.hentailib.me/old", "ru") {
+class HentaiLib : LibGroup("HentaiLib", "https://hentailib.me", "ru") {
 
     override val id: Long = 6425650164840473547
 
@@ -24,11 +24,6 @@ class HentaiLib : LibGroup("HentaiLib", "https://old.hentailib.me/old", "ru") {
     override val baseUrl: String = domain
 
     override fun searchMangaRequest(page: Int, query: String, filters: FilterList): Request {
-        if (csrfToken.isEmpty()) {
-            val tokenResponse = client.newCall(popularMangaRequest(page)).execute()
-            val resBody = tokenResponse.body.string()
-            csrfToken = "_token\" content=\"(.*)\"".toRegex().find(resBody)!!.groups[1]!!.value
-        }
         val url = super.searchMangaRequest(page, query, filters).url.newBuilder()
         (if (filters.isEmpty()) getFilterList() else filters).forEach { filter ->
             when (filter) {
@@ -43,7 +38,7 @@ class HentaiLib : LibGroup("HentaiLib", "https://old.hentailib.me/old", "ru") {
                 else -> {}
             }
         }
-        return POST(url.toString(), catalogHeaders())
+        return GET(url.toString(), catalogHeaders())
     }
 
     // Filters
@@ -246,6 +241,6 @@ class HentaiLib : LibGroup("HentaiLib", "https://old.hentailib.me/old", "ru") {
         const val PREFIX_SLUG_SEARCH = "slug:"
 
         private const val DOMAIN_TITLE = "Домен"
-        private const val DOMAIN_DEFAULT = "https://old.hentailib.me/old"
+        private const val DOMAIN_DEFAULT = "https://hentailib.me"
     }
 }
