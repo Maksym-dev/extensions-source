@@ -38,7 +38,7 @@ class HentaiLib : LibGroup("HentaiLib", "https://hentailib.me", "ru") {
                 else -> {}
             }
         }
-        return GET(url.toString(), catalogHeaders())
+        return GET(url.toString(), apiHeaders())
     }
 
     // Filters

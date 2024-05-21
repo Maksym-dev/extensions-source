@@ -44,7 +44,7 @@ class YaoiLib : LibGroup("YaoiLib", "https://v2.slashlib.me", "ru") {
                 else -> {}
             }
         }
-        return GET(url.toString(), catalogHeaders())
+        return GET(url.toString(), apiHeaders())
     }
 
     // Filters
